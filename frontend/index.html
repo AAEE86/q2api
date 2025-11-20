@@ -184,6 +184,17 @@
     .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
     .tab-content { display:none; }
     .tab-content.active { display:block; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    thead { background:rgba(79,143,255,.08); }
+    th { padding:12px; text-align:left; color:var(--accent); font-weight:600; border-bottom:2px solid var(--border); }
+    td { padding:12px; border-bottom:1px solid var(--border); }
+    tbody tr { transition:background .2s; }
+    tbody tr:hover { background:rgba(79,143,255,.05); }
+    .table-wrap { max-height:600px; overflow:auto; border:1px solid var(--border); border-radius:12px; }
+    .table-wrap::-webkit-scrollbar { width:8px; height:8px; }
+    .table-wrap::-webkit-scrollbar-track { background:rgba(0,0,0,.2); }
+    .table-wrap::-webkit-scrollbar-thumb { background:rgba(79,143,255,.3); border-radius:4px; }
+    .btn-sm { padding:6px 12px; font-size:12px; }
   </style>
 </head>
 <body>
@@ -203,7 +214,9 @@
         <div class="row">
           <button class="btn-secondary" onclick="loadAccounts()">刷新列表</button>
         </div>
-        <div class="list" id="accounts"></div>
+        <div class="table-wrap">
+          <table id="accounts"></table>
+        </div>
       </div>
     </div>
 
@@ -314,116 +327,36 @@ function api(path){
 
 function renderAccounts(list){
   const root = document.getElementById('accounts');
-  root.innerHTML = '';
   if (!Array.isArray(list) || list.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'muted';
-    empty.textContent = '暂无账号';
-    root.appendChild(empty);
+    root.innerHTML = '<tbody><tr><td colspan="12" class="muted" style="text-align:center">暂无账号</td></tr></tbody>';
     return;
   }
+  let html = '<thead><tr><th>标签</th><th>ID</th><th>启用</th><th>成功</th><th>错误</th><th>刷新状态</th><th>刷新时间</th><th>clientId</th><th>RefreshToken</th><th>AccessToken</th><th>创建/更新时间</th><th>操作</th></tr></thead><tbody>';
   for (const acc of list) {
-    const card = document.createElement('div');
-    card.className = 'card';
-
-    const header = document.createElement('div');
-    header.className = 'row';
-    const name = document.createElement('div');
-    name.innerHTML = '<strong>' + (acc.label || '(无标签)') + '</strong>';
-    const id = document.createElement('div');
-    id.className = 'chip mono';
-    id.textContent = acc.id;
-
-    const spacer = document.createElement('div');
-    spacer.className = 'right';
-
-    // Enabled toggle
-    const toggleWrap = document.createElement('div');
-    const toggleLabel = document.createElement('label');
-    toggleLabel.style.marginRight = '6px';
-    toggleLabel.className = 'muted';
-    toggleLabel.textContent = '启用';
-    const toggle = document.createElement('label');
-    toggle.className = 'switch';
-    const chk = document.createElement('input');
-    chk.type = 'checkbox';
-    chk.checked = !!acc.enabled;
-    chk.onchange = async () => {
-      try {
-        await updateAccount(acc.id, { enabled: chk.checked });
-      } catch(e) {
-        // revert if failed
-        chk.checked = !chk.checked;
-      }
-    };
-    const slider = document.createElement('span');
-    slider.className = 'slider';
-    toggle.appendChild(chk); toggle.appendChild(slider);
-    toggleWrap.appendChild(toggleLabel); toggleWrap.appendChild(toggle);
-
-    const refreshBtn = document.createElement('button');
-    refreshBtn.className = 'btn-warn';
-    refreshBtn.textContent = '刷新Token';
-    refreshBtn.onclick = () => refreshAccount(acc.id);
-
-    const delBtn = document.createElement('button');
-    delBtn.className = 'btn-danger';
-    delBtn.textContent = '删除';
-    delBtn.onclick = () => deleteAccount(acc.id);
-
-    header.appendChild(name);
-    header.appendChild(id);
-    header.appendChild(spacer);
-    header.appendChild(toggleWrap);
-    header.appendChild(refreshBtn);
-    header.appendChild(delBtn);
-    card.appendChild(header);
-
-    const meta = document.createElement('div');
-    meta.className = 'kvs mono';
-    function row(k, v) {
-      const kEl = document.createElement('div'); kEl.className = 'muted'; kEl.textContent = k;
-      const vEl = document.createElement('div'); vEl.textContent = v ?? '';
-      meta.appendChild(kEl); meta.appendChild(vEl);
-    }
-    row('enabled', String(!!acc.enabled));
-    row('success_count', acc.success_count ?? 0);
-    row('error_count', acc.error_count ?? 0);
-    row('last_refresh_status', acc.last_refresh_status);
-    row('last_refresh_time', acc.last_refresh_time);
-    row('clientId', acc.clientId);
-    row('hasRefreshToken', acc.refreshToken ? 'yes' : 'no');
-    row('hasAccessToken', acc.accessToken ? 'yes' : 'no');
-    row('created_at', acc.created_at);
-    row('updated_at', acc.updated_at);
-    if (acc.other) {
-      row('other', JSON.stringify(acc.other));
-    }
-    card.appendChild(meta);
-
-    // quick edit form (label, accessToken)
-    const editRow = document.createElement('div');
-    editRow.className = 'row';
-    editRow.style.marginTop = '8px';
-    const labelField = document.createElement('input');
-    labelField.placeholder = 'label';
-    labelField.value = acc.label || '';
-    const accessField = document.createElement('input');
-    accessField.placeholder = 'accessToken（可选）';
-    accessField.value = acc.accessToken || '';
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'btn-secondary';
-    saveBtn.textContent = '保存';
-    saveBtn.onclick = async () => {
-      await updateAccount(acc.id, { label: labelField.value, accessToken: accessField.value });
-    };
-    editRow.appendChild(labelField);
-    editRow.appendChild(accessField);
-    editRow.appendChild(saveBtn);
-    card.appendChild(editRow);
-
-    root.appendChild(card);
+    const toggleId = 'toggle_' + acc.id;
+    html += '<tr>';
+    html += '<td><strong>' + (acc.label || '(无标签)') + '</strong></td>';
+    html += '<td class="mono" style="font-size:11px">' + acc.id + '</td>';
+    html += '<td><label class="switch"><input id="' + toggleId + '" type="checkbox" ' + (acc.enabled ? 'checked' : '') + ' onchange="toggleEnabled(\'' + acc.id + '\',this.checked)"/><span class="slider"></span></label></td>';
+    html += '<td>' + (acc.success_count ?? 0) + '</td>';
+    html += '<td>' + (acc.error_count ?? 0) + '</td>';
+    html += '<td class="mono" style="font-size:11px">' + (acc.last_refresh_status || '-') + '</td>';
+    html += '<td class="mono" style="font-size:11px">' + (acc.last_refresh_time || '-') + '</td>';
+    html += '<td class="mono" style="font-size:11px">' + (acc.clientId || '-') + '</td>';
+    html += '<td>' + (acc.refreshToken ? '✓' : '✗') + '</td>';
+    html += '<td>' + (acc.accessToken ? '✓' : '✗') + '</td>';
+    html += '<td class="mono" style="font-size:10px">' + (acc.created_at || '-') + '<br/>' + (acc.updated_at || '-') + '</td>';
+    html += '<td><button class="btn-warn btn-sm" onclick="refreshAccount(\'' + acc.id + '\')">刷新</button> <button class="btn-danger btn-sm" onclick="deleteAccount(\'' + acc.id + '\')">删除</button></td>';
+    html += '</tr>';
   }
+  html += '</tbody>';
+  root.innerHTML = html;
+}
+
+function toggleEnabled(id, enabled) {
+  updateAccount(id, { enabled }).catch(() => {
+    document.getElementById('toggle_' + id).checked = !enabled;
+  });
 }
 
 async function loadAccounts(){
