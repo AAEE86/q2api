@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, Context, Next } from "hono";
 import { cors } from "hono/cors";
 import { serveStatic } from "hono/deno";
 import { 
@@ -66,7 +66,7 @@ function cleanupExpiredSessions() {
 Deno.cron("Cleanup Sessions", "0 * * * *", cleanupExpiredSessions);
 
 // --- Web Auth Middleware ---
-function requireWebAuth(c: any, next: any) {
+function requireWebAuth(c: Context, next: Next) {
   // If no web password is set, allow access
   if (!WEB_PASSWORD) {
     return next();
@@ -263,18 +263,18 @@ Deno.cron("Refresh Tokens", "*/5 * * * *", refreshStaleTokens);
 
 // --- Routes ---
 
-app.get("/healthz", (c) => c.json({ status: "ok" }));
+app.get("/healthz", (c: Context) => c.json({ status: "ok" }));
 
 // Login page
 app.get("/login", serveStatic({ path: "./frontend/login.html" }));
 
 // Login API
-app.post("/api/login", async (c) => {
+app.post("/api/login", async (c: Context) => {
   if (!WEB_PASSWORD) {
     return c.json({ error: "Web password not configured" }, 500);
   }
 
-  const body = await c.req.json();
+  const body = await c.req.json() as { password?: string };
   const { password } = body;
 
   if (password === WEB_PASSWORD) {
@@ -286,7 +286,7 @@ app.post("/api/login", async (c) => {
 });
 
 // Logout API
-app.post("/api/logout", async (c) => {
+app.post("/api/logout", async (c: Context) => {
   const sessionToken = c.req.header("Cookie")?.match(/session=([^;]+)/)?.[1];
   if (sessionToken) {
     WEB_SESSIONS.delete(sessionToken);
@@ -295,14 +295,14 @@ app.post("/api/logout", async (c) => {
 });
 
 // Frontend with auth protection
-app.get("/", (c) => {
+app.get("/", (c: Context) => {
   return requireWebAuth(c, () => {
     return serveStatic({ path: "./frontend/index.html" })(c);
   });
 });
 
 // Protect all frontend routes
-app.get("/frontend/*", (c) => {
+app.get("/frontend/*", (c: Context) => {
   return requireWebAuth(c, () => {
     return serveStatic({ path: "./frontend" })(c);
   });
@@ -310,41 +310,41 @@ app.get("/frontend/*", (c) => {
 
 // Account Management
 if (CONSOLE_ENABLED) {
-  app.get("/v2/accounts", async (c) => {
+  app.get("/v2/accounts", async (c: Context) => {
     const accounts = await db.listAccounts();
     const sanitizedAccounts = accounts.map(sanitizeAccount);
     return c.json(sanitizedAccounts);
   });
 
-  app.post("/v2/accounts", async (c) => {
-    const body = await c.req.json<AccountCreate>();
+  app.post("/v2/accounts", async (c: Context) => {
+    const body = await c.req.json() as AccountCreate;
     const acc = await db.createAccount(body);
     return c.json(sanitizeAccount(acc));
   });
 
-  app.get("/v2/accounts/:id", async (c) => {
+  app.get("/v2/accounts/:id", async (c: Context) => {
     const id = c.req.param("id");
     const acc = await db.getAccount(id);
     if (!acc) return c.json({ error: "Not found" }, 404);
     return c.json(sanitizeAccount(acc));
   });
 
-  app.delete("/v2/accounts/:id", async (c) => {
+  app.delete("/v2/accounts/:id", async (c: Context) => {
     const id = c.req.param("id");
     const deleted = await db.deleteAccount(id);
     if (!deleted) return c.json({ error: "Not found" }, 404);
     return c.json({ deleted: id });
   });
 
-  app.patch("/v2/accounts/:id", async (c) => {
+  app.patch("/v2/accounts/:id", async (c: Context) => {
     const id = c.req.param("id");
-    const body = await c.req.json<AccountUpdate>();
+    const body = await c.req.json() as AccountUpdate;
     const updated = await db.updateAccount(id, body);
     if (!updated) return c.json({ error: "Not found" }, 404);
     return c.json(updated);
   });
 
-  app.post("/v2/accounts/:id/refresh", async (c) => {
+  app.post("/v2/accounts/:id/refresh", async (c: Context) => {
     const id = c.req.param("id");
     try {
       const acc = await refreshAccessTokenInDb(id);
@@ -359,8 +359,8 @@ if (CONSOLE_ENABLED) {
 const AUTH_SESSIONS = new Map<string, any>();
 
 if (CONSOLE_ENABLED) {
-  app.post("/v2/auth/start", async (c) => {
-    const body = await c.req.json<{label?: string, enabled?: boolean}>();
+  app.post("/v2/auth/start", async (c: Context) => {
+    const body = await c.req.json() as {label?: string, enabled?: boolean};
     try {
         const [cid, csec] = await auth.registerClientMin();
         const dev = await auth.deviceAuthorize(cid, csec);
@@ -395,7 +395,7 @@ if (CONSOLE_ENABLED) {
     }
   });
 
-  app.get("/v2/auth/status/:authId", (c) => {
+  app.get("/v2/auth/status/:authId", (c: Context) => {
       const authId = c.req.param("authId");
       const sess = AUTH_SESSIONS.get(authId);
       if (!sess) return c.json({ error: "Not found" }, 404);
@@ -412,7 +412,7 @@ if (CONSOLE_ENABLED) {
       });
   });
 
-  app.post("/v2/auth/claim/:authId", async (c) => {
+  app.post("/v2/auth/claim/:authId", async (c: Context) => {
       const authId = c.req.param("authId");
       const sess = AUTH_SESSIONS.get(authId);
       if (!sess) return c.json({ error: "Not found" }, 404);
@@ -466,8 +466,8 @@ if (CONSOLE_ENABLED) {
 
 // Chat API
 
-app.post("/v1/messages", async (c) => {
-    const rawReq = await c.req.json<Partial<ClaudeRequest>>();
+app.post("/v1/messages", async (c: Context) => {
+    const rawReq = await c.req.json() as Partial<ClaudeRequest>;
     const req: ClaudeRequest = {
         model: rawReq.model || "claude-sonnet-4",
         messages: rawReq.messages || [],
@@ -619,8 +619,8 @@ app.post("/v1/messages", async (c) => {
     }
 });
 
-app.post("/v1/chat/completions", async (c) => {
-    const req = await c.req.json<ChatCompletionRequest>();
+app.post("/v1/chat/completions", async (c: Context) => {
+    const req = await c.req.json() as ChatCompletionRequest;
     const authHeader = c.req.header("Authorization");
     const bearer = extractBearer(authHeader);
 
